@@ -1,5 +1,3 @@
-from importlib.resources import files
-
 from fastapi import FastAPI
 app = FastAPI()
 
@@ -22,23 +20,37 @@ ignore = {".venv",
 
 
 def scan_directory(path):
+    not_allowed_entensions = ('.png', '.jpg', '.jpeg', '.exe', '.zip')
+
     file_content = {}
-    for file in scan_directory(path):
-        # making key value pair for file name and its content
-        file_content[file] = read_files(file)
+    for item in path.iterdir():
+        if item.name in ignore:
+            continue
+        elif item.is_dir():
+            # update file_conte for each file found in the directory
+            file_content.update(scan_directory(item))
+        else:
+            if item.name.endswith(not_allowed_entensions):
+                continue
+            else:
+                file_content[item] = read_file(item)
     return file_content
 
-    # for item in path.iterdir():
-    #     if item.name in ignore:
-    #         continue
-    #     elif item.is_dir():
-    #         files.extend(scan_directory(item))
-    #     else:
-    #         files.append(item.name)
-    # return files
 
-
-def read_files(path):
+def read_file(path):
     with open(path, "r") as file:
         content = file.read()
     return content
+
+
+# @app.get("/scan")
+# def scan():
+#     from pathlib import Path
+
+#     project = Path(".")
+
+#     result = scan_directory(project)
+
+#     return {
+#         "files": len(result)
+#     }
