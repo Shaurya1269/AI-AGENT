@@ -68,8 +68,6 @@ def search_index(file_content, search_term):
 
 
 project_index = {}
-
-
 @app.get("/scan")
 def scan():
     project = Path(".")
@@ -120,6 +118,76 @@ def parse_import(line_text):
         return None
     return {
         "type": "import",
-        "module_": module,
+        "module": module,
         "symbol": symbol
     }
+
+def get_functions(project_index):
+    functions=[]
+    for file_path,content in project_index.items():
+        for line_number,line_text in content:
+            metadata=parse_function(line_text)
+            if metadata:
+                functions.append({
+                    "file_path":str(file_path),
+                    "line_number":line_number,
+                    "name":metadata["name"]
+                })
+    return functions
+
+@app.get("/functions")
+def functions():
+    if not project_index:
+        return {"status":"error",
+                "message":"No files indexed. Please run the /scan endpoint first."}
+    result=get_functions(project_index)
+    return {
+        "status":"success",
+        "functions":result,
+        "count":len(result)
+    }
+
+def get_imports(project_index):
+    imports=[]
+    for file_path,content in project_index.items():
+        for line_number,line_text in content:
+            metadata=parse_import(line_text)
+            if metadata:
+                imports.append({
+                    "file_path":str(file_path),
+                    "line_number":line_number,
+                    "module":metadata["module"],
+                    "symbol":metadata["symbol"]
+                })
+    return imports
+
+@app.get("/imports")
+def imports():
+    if not project_index:
+        return {"status":"error",
+                "message":"No files indexed. Please run the /scan endpoint first."}
+    result=get_imports(project_index)
+    return{
+        "status":"success",
+        "imports":result,
+        "count":len(result)
+    }
+    
+def projects():     #tells us about the number of all the files,functions,imports,root files etc.
+    root = Path(".").resolve()   #gives absolute path
+    project_structure ={
+        "files": 0,
+        "functions": 0,
+        "imports":0,
+        "python_files":0,
+        "text_files":0,
+        "project_root":str(root)
+    }
+    for item in scan_directory(root):
+        if item.is_file():
+            project_structure["files"] = len(project_index)
+        if item.suffix == ".py":
+            project_structure["python_files"] += 1
+    project_structure["functions"] = len(get_functions(project_index))
+    project_structure["imports"] = len(get_imports(project_index))
+    return project_structure
