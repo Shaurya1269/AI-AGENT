@@ -1,5 +1,11 @@
 from fastapi import FastAPI
 from pathlib import Path
+from .scanner import scan_directory
+from .search import get_function_body, search_index
+from .explorer import (get_functions, get_imports,
+                       find_definitions, find_references)
+
+
 app = FastAPI()
 
 
@@ -14,60 +20,9 @@ def health():     # this endpoint is used to check the health of the application
     return {"status": "healthy", "services": "antigravity", "version": "1.0.0"}
 
 
-ignore = {".venv",
-          ".git",
-          "__pycache__",
-          "node_modules"}
-
-
-def scan_directory(path):
-    not_allowed_extensions = ('.png', '.jpg', '.jpeg', '.exe', '.zip')
-
-    file_content = {}
-    for item in path.iterdir():
-        if item.name in ignore:
-            continue
-        elif item.is_dir():
-            # update file_conte for each file found in the directory
-            file_content.update(scan_directory(item))
-        else:
-            if item.name.endswith(not_allowed_extensions):
-                continue
-            else:
-                file_content[item] = read_file(item)
-    return file_content
-
-
-def read_file(path):
-    with open(path, "r") as file:
-        # enumerate returns a tuple containing the index and the value of each item in the iterable
-        content = list(enumerate(file.readlines(), start=1))
-    return content
-
-
-# shows the files in which the search term is found
-def search_index(file_content, search_term):
-    results = []
-    # .items() returns a view object that displays a list of a dictionary's key-value tuple pairs.
-    for file_path, content in file_content.items():
-        for line_number, line_text in content:
-            if search_term.lower() in line_text.lower():
-                result = {
-                    "file_path": str(file_path),
-                    "line_number": line_number,
-                    # strip() removes any leading and trailing whitespace characters from the string
-                    "text": line_text.strip()
-                }
-                metadata = parse_function(line_text)
-                if metadata is None:
-                    metadata = parse_import(line_text)
-                if metadata:
-                    result.update(metadata)
-                results.append(result)
-    return results
-
-
 project_index = {}
+
+
 @app.get("/scan")
 def scan():
     project = Path(".")
@@ -94,100 +49,113 @@ def search(search_term):
     }
 
 
-def parse_function(line_text):  # checks if the line contains a function definition
-    line = line_text.strip()
-    if not line.startswith("def "):
-        return None
-    name = line.split("(")[0].replace("def ", "").strip()
-    return {
-        "type": "function",
-        "name": name
-    }
-
-
-def parse_import(line_text):
-    line = line_text.strip()
-    if line.startswith("from"):
-        module = line.split()[1]
-        symbol = line.split()[3]
-    elif line.startswith("import"):
-        module = line.split()[1]
-        symbol = None
-
-    else:
-        return None
-    return {
-        "type": "import",
-        "module": module,
-        "symbol": symbol
-    }
-
-def get_functions(project_index):
-    functions=[]
-    for file_path,content in project_index.items():
-        for line_number,line_text in content:
-            metadata=parse_function(line_text)
-            if metadata:
-                functions.append({
-                    "file_path":str(file_path),
-                    "line_number":line_number,
-                    "name":metadata["name"]
-                })
-    return functions
-
 @app.get("/functions")
 def functions():
     if not project_index:
-        return {"status":"error",
-                "message":"No files indexed. Please run the /scan endpoint first."}
-    result=get_functions(project_index)
+        return {"status": "error",
+                "message": "No files indexed. Please run the /scan endpoint first."}
+    result = get_functions(project_index)
     return {
-        "status":"success",
-        "functions":result,
-        "count":len(result)
+        "status": "success",
+        "functions": result,
+        "count": len(result)
     }
 
-def get_imports(project_index):
-    imports=[]
-    for file_path,content in project_index.items():
-        for line_number,line_text in content:
-            metadata=parse_import(line_text)
-            if metadata:
-                imports.append({
-                    "file_path":str(file_path),
-                    "line_number":line_number,
-                    "module":metadata["module"],
-                    "symbol":metadata["symbol"]
-                })
-    return imports
 
 @app.get("/imports")
 def imports():
     if not project_index:
-        return {"status":"error",
-                "message":"No files indexed. Please run the /scan endpoint first."}
-    result=get_imports(project_index)
-    return{
-        "status":"success",
-        "imports":result,
-        "count":len(result)
+        return {"status": "error",
+                "message": "No files indexed. Please run the /scan endpoint first."}
+    result = get_imports(project_index)
+    return {
+        "status": "success",
+        "imports": result,
+        "count": len(result)
     }
-    
-def projects():     #tells us about the number of all the files,functions,imports,root files etc.
-    root = Path(".").resolve()   #gives absolute path
-    project_structure ={
-        "files": 0,
-        "functions": 0,
-        "imports":0,
-        "python_files":0,
-        "text_files":0,
-        "project_root":str(root)
+
+
+# tells us about the number of all the files,functions,imports,root files etc.
+def get_projects():
+    root = Path(".").resolve()  # gives absolute path
+    project_structure = {
+        "files": len(project_index),
+        "functions": len(get_functions(project_index)),
+        "imports": len(get_imports(project_index)),
+        "python_files": 0,
+        "text_files": len(project_index),
+        "project_root": str(root)
     }
-    for item in scan_directory(root):
-        if item.is_file():
-            project_structure["files"] = len(project_index)
-        if item.suffix == ".py":
+    for file_path in project_index:
+        if file_path.suffix == ".py":
             project_structure["python_files"] += 1
-    project_structure["functions"] = len(get_functions(project_index))
-    project_structure["imports"] = len(get_imports(project_index))
     return project_structure
+
+
+@app.get("/project")
+def projects():
+    if not project_index:
+        return {"status": "error",
+                "message": "No files indexed. Please run the /scan endpoint first."}
+    result = get_projects()
+    return {
+        "status": "success",
+        "project_structure": result
+    }
+
+
+@app.get("/definitions")
+def definition(symbol: str):
+    if not project_index:
+        return {"status": "error",
+                "message": "No files indexed. Please run the /scan endpoint first."}
+    result = find_definitions(project_index, symbol)
+    if not result:
+        return {
+            "status": "error",
+            "message": f"No definition found for {symbol}."
+        }
+    return {
+        "status": "success",
+        "definition": result,
+        "count": len(result)
+    }
+
+
+@app.get("/references")
+def references(symbol: str):
+    if not project_index:
+        return {"status": "error",
+                "message": "No files indexed. Please run the /scan endpoint first."}
+    result = find_references(project_index, symbol)
+    if not result:
+        return {
+            "status": "error",
+            "message": f"No references found for {symbol}."
+        }
+    return {
+        "status": "success",
+        "references": result,
+        "count": len(result)
+    }
+
+
+@app.get("/function_body")
+def function_body(file_path: str, symbol: str):
+    if not project_index:
+        return {"status": "error",
+                "message": "No files indexed. Please run the /scan endpoint first."}
+    path = Path(file_path)
+    if path not in project_index:
+        return {"status": "error",
+                "message": f"File {file_path} not found in the indexed files."}
+    result = get_function_body(project_index, path, symbol)
+    if not result:
+        return {
+            "status": "error",
+            "message": f"No function body found for {symbol} in {file_path}."
+        }
+    return {
+        "status": "success",
+        "function_body": result
+    }
