@@ -1,6 +1,7 @@
 from .parser import parse_function, parse_import
 from pathlib import Path
 
+
 def get_functions(project_index):
     functions = []
     for file_path, content in project_index.items():
@@ -63,6 +64,7 @@ def find_references(project_index, symbol):
                     })
     return references
 
+
 def get_function_body(file_content, file_path, function_name):
     # checking with the help of indentation level of function and using ennumerate
     for index, (line_number, line_text) in enumerate(file_content[file_path]):
@@ -81,16 +83,18 @@ def get_function_body(file_content, file_path, function_name):
     return None
 
 
-def build_context(project_index,symbol):
-    definition = find_definitions(project_index,symbol)
+def build_context(project_index, symbol):
+    definition = find_definitions(project_index, symbol)
     if not definition:
         return None
     file_path = Path(definition[0]["file_path"])
-    body =  get_function_body(project_index,file_path,symbol)
-    references = find_references(project_index,symbol)
+    body = get_function_body(project_index, file_path, symbol)
+    references = find_references(project_index, symbol)
+    imports = get_imports(project_index)
     context = {
-        "definition" : definition ,
-        "body" : body,
-        "references" : references,
-        }
+        "definition": definition,
+        "body": body,
+        "references": references,
+        "imports": imports
+    }
     return context
