@@ -75,5 +75,5 @@ if __name__ == "__main__":
     project_index = scan_directory(project)
 
     answer = answer_question(project_index, "scan_directory",
-                             "what does this function do , explain in detail")
+                             "what directories are ignored in this function?")
     print(answer)

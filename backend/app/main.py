@@ -1,15 +1,16 @@
 from fastapi import FastAPI
 from pathlib import Path
 from .scanner import scan_directory
-from .search import get_function_body, search_index
+from .search import search_index
 from .explorer import (get_functions, get_imports,
-                       find_definitions, find_references)
-
+                       find_definitions, find_references, get_function_body)
+from .ai import answer_question
 
 app = FastAPI()
 
-
 # whenever someone performs get request on the root endpoint, this function will be executed
+
+
 @app.get("/")
 def root():
     return {"message": "Welcome to Shaurya's Antigravity"}
@@ -158,4 +159,20 @@ def function_body(file_path: str, symbol: str):
     return {
         "status": "success",
         "function_body": result
+    }
+
+
+@app.get("/ask")
+def ask(symbol: str, question: str):
+    if not project_index:
+        return {
+            "status": "error",
+            "message": "No files indexed. Please run the /scan endpoint first."
+        }
+    result = answer_question(project_index, symbol, question)
+    return {
+        "status": "success",
+        "symbol": symbol,
+        "question": question,
+        "answer": result
     }
