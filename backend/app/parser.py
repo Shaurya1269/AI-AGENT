@@ -1,3 +1,6 @@
+import re
+
+
 def parse_function(line_text):  # checks if the line contains a function definition
     line = line_text.strip()
     if not line.startswith("def "):
@@ -20,7 +23,7 @@ def parse_import(line_text):
             module = line.split()[1]
             symbol = None
         else:
-           return None
+            return None
 
     else:
         return None
@@ -29,3 +32,18 @@ def parse_import(line_text):
         "module": module,
         "symbol": symbol
     }
+
+
+def parse_function_calls(line_text):
+    line = line_text.strip()
+    matches  = re.findall(r'\b([A-Za-z_][A-Za-z0-9_]*)\s*\(', line)  #matches looks like : 
+    if matches:
+        return [
+        {
+            "type": "function_call",
+            "name" : name
+        }
+        for name in matches   
+        ]
+    return []
+

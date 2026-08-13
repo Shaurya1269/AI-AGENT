@@ -1,4 +1,4 @@
-from .parser import parse_function, parse_import
+from .parser import parse_function, parse_import, parse_function_calls
 from pathlib import Path
 
 
@@ -7,6 +7,7 @@ def get_functions(project_index):
     for file_path, content in project_index.items():
         for line_number, line_text in content:
             metadata = parse_function(line_text)
+
             if metadata:
                 functions.append({
                     "file_path": str(file_path),
@@ -83,6 +84,20 @@ def get_function_body(file_content, file_path, function_name):
     return None
 
 
+def find_function_calls(project_index, function_body):
+    calls = []
+    all_functions = get_functions(project_index)
+    project_funtion_names = {function["name"] for function in all_functions}
+    for line in function_body.splitlines():
+        parsed_calls = parse_function_calls(line)
+
+        for call in parsed_calls:
+            if call["name"] in project_funtion_names:
+                calls.append(call["name"])
+
+    return calls
+
+
 def build_context(project_index, symbol):
     definition = find_definitions(project_index, symbol)
     if not definition:
@@ -91,10 +106,12 @@ def build_context(project_index, symbol):
     body = get_function_body(project_index, file_path, symbol)
     references = find_references(project_index, symbol)
     imports = get_imports(project_index)
+    calls = find_function_calls(project_index, body)
     context = {
         "definition": definition,
         "body": body,
         "references": references,
-        "imports": imports
+        "imports": imports,
+        "calls": calls
     }
     return context

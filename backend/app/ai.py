@@ -42,6 +42,8 @@ When answering:
 - Mention where the function is defined and used if references are available.
 - If imports are relevant, mention them.
 - Keep the explanation concise unless the user asks for more detail.
+- Never say that information cannot be determined if that information is explicitly present anywhere in the provided context.
+- Before claiming something is unknown, check the function body, definitions, references, imports, and calls carefully.
 """
     return prompt
 
@@ -66,7 +68,6 @@ def answer_question(project_index, symbol, question):
     print(context)  # temporary
     prompt = build_prompt(question, context)
     answer = ask_llm(prompt)
-
     return answer
 
 
@@ -76,4 +77,8 @@ if __name__ == "__main__":
 
     answer = answer_question(project_index, "scan_directory",
                              "what directories are ignored in this function?")
+    
     print(answer)
+    
+    
+@tool    
