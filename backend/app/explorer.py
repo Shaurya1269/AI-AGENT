@@ -89,6 +89,9 @@ def find_function_calls(project_index, function_body):
     all_functions = get_functions(project_index)
     project_funtion_names = {function["name"] for function in all_functions}
     for line in function_body.splitlines():
+        line = line.strip()
+        if line.startswith("def "):
+            continue
         parsed_calls = parse_function_calls(line)
 
         for call in parsed_calls:
@@ -107,11 +110,30 @@ def build_context(project_index, symbol):
     references = find_references(project_index, symbol)
     imports = get_imports(project_index)
     calls = find_function_calls(project_index, body)
+    called_function_context = get_called_function_context(project_index, calls)
     context = {
         "definition": definition,
         "body": body,
         "references": references,
         "imports": imports,
-        "calls": calls
+        "calls": calls,
+        "called_functions": called_function_context
     }
     return context
+
+
+def get_called_function_context(project_index, calls):
+    called_functions = {}
+    for call in calls:
+        definition = find_definitions(project_index, call)
+
+        if definition:
+            file_path = Path(definition[0]["file_path"])
+            body = get_function_body(project_index, file_path, call)
+            calls_by_called_function = find_function_calls(project_index, body)
+            called_functions[call] = {
+                "definition": definition[0],
+                "body": body,
+                "calls": calls_by_called_function
+            }
+    return called_functions

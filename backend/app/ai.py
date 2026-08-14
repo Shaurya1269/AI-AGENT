@@ -76,8 +76,6 @@ if __name__ == "__main__":
     project_index = scan_directory(project)
 
     answer = answer_question(project_index, "scan_directory",
-                             "what directories are ignored in this function?")
-    
+                             "what does read_file do and why is it used to scan directory")
+
     print(answer)
-    
-     
