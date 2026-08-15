@@ -14,22 +14,64 @@ def parse_functions(source_code):
                 "name": node.name,
                 "line_number": node.lineno,
                 "end_line_number": node.end_lineno,
-                "parameters":[
+                "parameters": [
                     arg.arg for arg in node.args.args
-                ] 
+                ]
             })
     return functions
 
 
-if __name__ == "__main__":
-    code = """
-def outer():
-    def inner():
-        return 10
+def parse_python_imports(source_code):
+    tree = ast.parse(source_code)
 
-    return inner()
+    imports = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                imports.append({
+                    "type": "import",
+                    "module": alias.name,
+                    "symbol": None,
+                    "line_number": node.lineno
+                })
+
+        elif isinstance(node, ast.ImportFrom):
+            for alias in node.names:
+                imports.append({
+                    "type": "import",
+                    "module": node.module,
+                    "symbol": alias.name,
+                    "line_number": node.lineno
+                })
+
+    return imports
+
+
+def parse_python_calls(source_code):
+    tree = ast.parse(source_code)
+
+    calls = []
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            if isinstance(node.func, ast.Name):
+                name = node.func.id
+            elif isinstance(node.func, ast.Attribute):
+                name = node.func.attr
+            else:
+                continue
+            calls.append({
+                "type": "function_call",
+                "name": name,
+                "line_number": node.lineno
+            })
+    return calls
+
+
+source = """
+result = helper()
+obj.process()
+print(result)
 """
 
-    result = parse_functions(code)
-
-    print(result)
+print(parse_python_calls(source))
