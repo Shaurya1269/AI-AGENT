@@ -67,11 +67,41 @@ def parse_python_calls(source_code):
             })
     return calls
 
-
+def parse_python_classes(source_code):
+    tree = ast.parse(source_code)
+    classes = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ClassDef):
+            methods = []
+            for child in node.body:
+                if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    methods.append({
+                        "name" : child.name,
+                        "line_number": child.lineno,
+                        "end_line_number": child.end_lineno
+                    })
+            classes.append({
+                "type" : "class",
+                "name" : node.name,
+                "line_number" : node.lineno,
+                "end_line_number" : node.end_lineno,
+                "methods" : methods
+            })
+    return classes
+            
+            
 source = """
-result = helper()
-obj.process()
-print(result)
+class Scanner:
+    def scan(self):
+        pass
+
+    def read(self):
+        pass
+
+
+class Database:
+    def connect(self):
+        pass
 """
 
-print(parse_python_calls(source))
+print(parse_python_classes(source))           
