@@ -1,50 +1,71 @@
-from .parser import parse_function, parse_import, parse_function_calls
+from .ast_parser import build_ast_index
 from pathlib import Path
 
 
 def get_functions(project_index):
+    ast_index = build_ast_index(project_index)
     functions = []
-    for file_path, content in project_index.items():
-        for line_number, line_text in content:
-            metadata = parse_function(line_text)
-
-            if metadata:
-                functions.append({
-                    "file_path": str(file_path),
-                    "line_number": line_number,
-                    "name": metadata["name"]
-                })
+    for file_path, analysis in ast_index.items():
+        for function in analysis["functions"]:
+            functions.append({
+                "file_path": str(file_path),
+                "name": function["name"],
+                "line_number": function["line_number"]
+            })
     return functions
 
 
 def get_imports(project_index):
+    ast_index = build_ast_index(project_index)
     imports = []
-    for file_path, content in project_index.items():
-        for line_number, line_text in content:
-            print(repr(line_text))
-            metadata = parse_import(line_text)
-            if metadata:
-                imports.append({
-                    "file_path": str(file_path),
-                    "line_number": line_number,
-                    "module": metadata["module"],
-                    "symbol": metadata["symbol"]
-                })
+    for file_path, analysis in ast_index.items():
+        for item in analysis["imports"]:
+            imports.append({
+                "type": item["type"],
+                "module": item["module"],
+                "symbol": item["symbol"],
+                "line_number": item["line_number"]
+            })
     return imports
 
 
 # where is the function created and where is it used
 def find_definitions(project_index, symbol):
+    ast_index = build_ast_index(project_index)
     definitions = []
-    for file_path, content in project_index.items():
-        for line_number, line_text in content:
-            metadata = parse_function(line_text)
-            if metadata and metadata["name"] == symbol:
+    for file_path, analysis in ast_index.items():
+
+        # for top level and nested functions
+        for function in analysis["functions"]:
+            if function["name"] == symbol:
                 definitions.append({
-                    "symbol": metadata["name"],
+                    "symbol": symbol,
                     "file_path": str(file_path),
-                    "line_number": line_number,
+                    "line_number": function["line_number"],
+                    "type": "function"
                 })
+
+    # for classes
+        for class_info in analysis["classes"]:
+            if class_info["name"] == symbol:
+                definitions.append({
+                    "symbol": symbol,
+                    "file_path": str(file_path),
+                    "line_number": class_info["line_number"],
+                    "type": "class"
+                })
+
+    # Methods inside classes
+            for method in class_info["methods"]:
+                if method["name"] == symbol:
+                    definitions.append({
+                        "symbol": symbol,
+                        "file_path": str(file_path),
+                        "line_number": method["line_number"],
+                        "type": "method",
+                        "class": class_info["name"]
+                    })
+
     return definitions
 
 

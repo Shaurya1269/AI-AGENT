@@ -2,7 +2,7 @@
 import ast
 
 
-def parse_functions(source_code):
+def parse_python_functions(source_code):
     tree = ast.parse(source_code)
 
     functions = []
@@ -67,6 +67,7 @@ def parse_python_calls(source_code):
             })
     return calls
 
+
 def parse_python_classes(source_code):
     tree = ast.parse(source_code)
     classes = []
@@ -76,32 +77,37 @@ def parse_python_classes(source_code):
             for child in node.body:
                 if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
                     methods.append({
-                        "name" : child.name,
+                        "name": child.name,
                         "line_number": child.lineno,
                         "end_line_number": child.end_lineno
                     })
             classes.append({
-                "type" : "class",
-                "name" : node.name,
-                "line_number" : node.lineno,
-                "end_line_number" : node.end_lineno,
-                "methods" : methods
+                "type": "class",
+                "name": node.name,
+                "line_number": node.lineno,
+                "end_line_number": node.end_lineno,
+                "methods": methods
             })
     return classes
-            
-            
-source = """
-class Scanner:
-    def scan(self):
-        pass
-
-    def read(self):
-        pass
 
 
-class Database:
-    def connect(self):
-        pass
-"""
+def analyze_python(source_code):
+    return {
+        "functions": parse_python_functions(source_code),
+        "imports": parse_python_imports(source_code),
+        "calls": parse_python_calls(source_code),
+        "classes": parse_python_classes(source_code)
+    }
 
-print(parse_python_classes(source))           
+
+def build_ast_index(project_index):
+    ast_index = {}
+    
+    for file_path , content in project_index.items():
+        if file_path.suffix != ".py":
+            continue
+        source_code = "".join(
+            line_text for _, line_text in content    # line_text is the text of each line in the file, _ is the line number
+        )
+        ast_index[file_path] = analyze_python(source_code)
+    return ast_index
