@@ -8,7 +8,7 @@ def parse_python_functions(source_code):
     functions = []
 
     for node in ast.walk(tree):
-        if isinstance(node, ast.FunctionDef):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             functions.append({
                 "type": "function",
                 "name": node.name,
@@ -39,7 +39,7 @@ def parse_python_imports(source_code):
             for alias in node.names:
                 imports.append({
                     "type": "import",
-                    "module": node.module,
+                    "module": ("." * node.level) + (node.module or ""),
                     "symbol": alias.name,
                     "line_number": node.lineno
                 })

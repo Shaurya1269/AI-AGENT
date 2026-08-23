@@ -28,7 +28,7 @@ project_index = {}
 def scan():
     project = Path(".")
     global project_index
-    project_index = (scan_directory(project))
+    project_index = scan_directory(project)
     return {
         "status": "success",
         "indexed_files": f"{len(project_index)} "

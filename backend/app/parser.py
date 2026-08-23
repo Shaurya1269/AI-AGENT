@@ -3,28 +3,25 @@ import re
 
 def parse_function(line_text):  # checks if the line contains a function definition
     line = line_text.strip()
-    if not line.startswith("def "):
+    match = re.match(r"(?:async\s+)?def\s+([A-Za-z_]\w*)\s*\(", line)
+    if not match:
         return None
-    name = line.split("(")[0].replace("def ", "").strip()
     return {
         "type": "function",
-        "name": name
+        "name": match.group(1)
     }
 
 
 def parse_import(line_text):
     line = line_text.strip()
-    if line.startswith("from"):
-        module = line.split()[1]
-        symbol = line.split()[3]
-    elif line.startswith("import"):
-        parts = line.split()
-        if len(parts) > 1:
-            module = line.split()[1]
-            symbol = None
-        else:
-            return None
-
+    from_match = re.match(r"from\s+([^\s]+)\s+import\s+(.+)", line)
+    import_match = re.match(r"import\s+([^\s]+)", line)
+    if from_match:
+        module = from_match.group(1)
+        symbol = from_match.group(2).split(",")[0].strip()
+    elif import_match:
+        module = import_match.group(1).rstrip(",")
+        symbol = None
     else:
         return None
     return {
@@ -36,14 +33,14 @@ def parse_import(line_text):
 
 def parse_function_calls(line_text):
     line = line_text.strip()
-    matches  = re.findall(r'\b([A-Za-z_][A-Za-z0-9_]*)\s*\(', line)  #matches looks like : 
+    # matches looks like :
+    matches = re.findall(r'\b([A-Za-z_][A-Za-z0-9_]*)\s*\(', line)
     if matches:
         return [
-        {
-            "type": "function_call",
-            "name" : name
-        }
-        for name in matches   
+            {
+                "type": "function_call",
+                "name": name
+            }
+            for name in matches
         ]
     return []
-

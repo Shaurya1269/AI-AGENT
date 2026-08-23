@@ -1,5 +1,8 @@
+import re
+
 from .ast_parser import build_ast_index
 from pathlib import Path
+from .parser import parse_function, parse_function_calls
 
 
 def get_functions(project_index):
@@ -71,19 +74,25 @@ def find_definitions(project_index, symbol):
 
 def find_references(project_index, symbol):
     references = []
+    symbol_pattern = re.compile(rf"\b{re.escape(symbol)}\b")
     for file_path, content in project_index.items():
         for line_number, line_text in content:
-            if symbol in line_text:
-                metadata = parse_function(line_text)
-                if metadata and metadata["name"] == symbol:
-                    continue
-                else:
-                    references.append({
-                        "name": symbol,
-                        "file_path": str(file_path),
-                        "line_number": line_number,
-                        "text": line_text.strip()
-                    })
+            stripped_line = line_text.strip()
+            function_match = re.match(
+                r"(?:async\s+)?def\s+([A-Za-z_]\w*)", stripped_line
+            )
+            class_match = re.match(r"class\s+([A-Za-z_]\w*)", stripped_line)
+            is_definition = (
+                (function_match and function_match.group(1) == symbol)
+                or (class_match and class_match.group(1) == symbol)
+            )
+            if symbol_pattern.search(line_text) and not is_definition:
+                references.append({
+                    "name": symbol,
+                    "file_path": str(file_path),
+                    "line_number": line_number,
+                    "text": stripped_line
+                })
     return references
 
 
@@ -91,7 +100,11 @@ def get_function_body(file_content, file_path, function_name):
     # checking with the help of indentation level of function and using ennumerate
     for index, (line_number, line_text) in enumerate(file_content[file_path]):
         metadata = parse_function(line_text)
-        if metadata and metadata["name"] == function_name:
+        stripped_line = line_text.strip()
+        async_match = re.match(
+            r"async\s+def\s+([A-Za-z_]\w*)\s*\(", stripped_line)
+        if (metadata and metadata["name"] == function_name) or (
+                async_match and async_match.group(1) == function_name):
             function_body = []
             indentation_level = len(line_text) - len(line_text.lstrip())
             function_body.append(line_text)
@@ -107,6 +120,8 @@ def get_function_body(file_content, file_path, function_name):
 
 def find_function_calls(project_index, function_body):
     calls = []
+    if not function_body:
+        return calls
     all_functions = get_functions(project_index)
     project_funtion_names = {function["name"] for function in all_functions}
     for line in function_body.splitlines():

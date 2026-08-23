@@ -7,10 +7,11 @@ from pathlib import Path
 from .scanner import scan_directory
 
 load_dotenv()
+api_key = os.getenv("NVIDIA_API_KEY")
 client = OpenAI(
     base_url="https://integrate.api.nvidia.com/v1",
-    api_key=os.getenv("NVIDIA_API_KEY")
-)
+    api_key=api_key
+) if api_key else None
 
 
 def build_prompt(question, context):
@@ -49,6 +50,8 @@ When answering:
 
 
 def ask_llm(prompt):  # send prompt to llm using openai api
+    if client is None:
+        return "NVIDIA_API_KEY is not configured."
     response = client.chat.completions.create(
         model="meta/llama-3.1-8b-instruct",
         messages=[{"role": "user", "content": prompt}],
@@ -65,7 +68,6 @@ def answer_question(project_index, symbol, question):
     context = build_context(project_index, symbol)
     if not context:
         return "No context found for the given symbol."
-    print(context)  # temporary
     prompt = build_prompt(question, context)
     answer = ask_llm(prompt)
     return answer
