@@ -4,7 +4,7 @@ from .scanner import scan_directory
 from .search import search_index
 from .explorer import (get_functions, get_imports,
                        find_definitions, find_references, get_function_body)
-from .ai import answer_question
+from .ai import answer_question, test_tool_call
 
 app = FastAPI()
 
@@ -163,16 +163,16 @@ def function_body(file_path: str, symbol: str):
 
 
 @app.get("/ask")
-def ask(symbol: str, question: str):
+def ask(question: str):
     if not project_index:
         return {
             "status": "error",
             "message": "No files indexed. Please run the /scan endpoint first."
         }
-    result = answer_question(project_index, symbol, question)
+    result = answer_question(project_index,question)
     return {
         "status": "success",
-        "symbol": symbol,
         "question": question,
         "answer": result
     }
+

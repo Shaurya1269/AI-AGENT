@@ -1,10 +1,11 @@
 from openai import OpenAI
 from dotenv import load_dotenv
 import os
-from .explorer import build_context
+from .explorer import build_context, find_relevant_symbols
 
 from pathlib import Path
 from .scanner import scan_directory
+import json
 
 load_dotenv()
 api_key = os.getenv("NVIDIA_API_KEY")
@@ -64,20 +65,118 @@ def ask_llm(prompt):  # send prompt to llm using openai api
     return response.choices[0].message.content
 
 
-def answer_question(project_index, symbol, question):
-    context = build_context(project_index, symbol)
-    if not context:
-        return "No context found for the given symbol."
-    prompt = build_prompt(question, context)
-    answer = ask_llm(prompt)
-    return answer
+def answer_question(project_index, question):
+    symbols = find_relevant_symbols(project_index, question)
+
+    if not symbols:
+        return "I could not identify any relevant function in the project.Please try a different question."
+
+    contexts = {}
+
+    for symbol in symbols:
+        context = build_context(project_index, symbol)
+
+        if context:
+            contexts[symbol] = context
+
+    if not contexts:
+        return "I found relevant symbols, but could not build context for them."
+
+    prompt = build_prompt(question, contexts)
+    return ask_llm(prompt)
 
 
+def get_symbol_context_tool(project_index, symbol):
+    return build_context(project_index, symbol)
+
+
+def test_tool_call(project_index):
+
+    tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "get_symbol_context",
+                "description": "Get detailed information about a function in the project.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "symbol": {
+                            "type": "string",
+                            "description": "The function name to inspect."
+                        }
+                    },
+                    "required": ["symbol"]
+                }
+            }
+        }
+    ]
+
+    messages = [
+        {
+            "role": "user",
+            "content": "What does scan_directory do?"
+        }
+    ]
+
+    response = client.chat.completions.create(
+        model="meta/llama-3.1-8b-instruct",
+        messages=messages,
+        tools=tools,
+        tool_choice="auto"
+    )
+
+    message = response.choices[0].message
+
+    print("MODEL TOOL CALL:")
+    print(message.tool_calls)
+
+    if not message.tool_calls:
+        print("Model did not request a tool.")
+        return
+
+    tool_call = message.tool_calls[0]
+
+    arguments = json.loads(tool_call.function.arguments)
+    symbol = arguments["symbol"]
+
+    print("\nMODEL REQUESTED:")
+    print(symbol)
+
+    # Add the assistant's tool-call message to the conversation
+    messages.append(message)
+
+    # Execute our actual Python function
+    result = get_symbol_context_tool(project_index, symbol)
+
+    # Give the result back to the model
+    messages.append({
+        "role": "tool",
+        "tool_call_id": tool_call.id,
+        "content": str(result)
+    })
+
+    print("\nSending tool result back to model...")
+
+    final_response = client.chat.completions.create(
+        model="meta/llama-3.1-8b-instruct",
+        messages=messages,
+        tools=tools
+    )
+
+    final_message = final_response.choices[0].message
+
+    print("\nFINAL ANSWER:")
+    print(final_message.content)
+    
+    
+        
 if __name__ == "__main__":
     project = Path(".")
     project_index = scan_directory(project)
 
-    answer = answer_question(project_index, "scan_directory",
-                             "what does read_file do and why is it used to scan directory")
+    print("Starting tool test...")
 
-    print(answer)
+    test_tool_call(project_index)
+
+    print("Tool test finished.")

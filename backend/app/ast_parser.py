@@ -111,3 +111,32 @@ def build_ast_index(project_index):
         )
         ast_index[file_path] = analyze_python(source_code)
     return ast_index
+
+def parse_python_variables(source_code):
+    tree = ast.parse(source_code)
+
+    variables = []
+
+    for node in tree.body:
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    variables.append({
+                        "type": "variable",
+                        "name": target.id,
+                        "line_number": node.lineno,
+                        "value": ast.unparse(node.value)
+                    })
+
+    return variables
+
+if __name__ == "__main__":
+    source = """
+ignore = {".venv", ".git", "__pycache__", "node_modules"}
+
+def scan_directory(path):
+    if path in ignore:
+        return
+"""
+
+    print(parse_python_variables(source))
