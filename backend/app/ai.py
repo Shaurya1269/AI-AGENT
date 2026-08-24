@@ -56,7 +56,7 @@ def ask_llm(prompt):  # send prompt to llm using openai api
     response = client.chat.completions.create(
         model="meta/llama-3.1-8b-instruct",
         messages=[{"role": "user", "content": prompt}],
-        temperature=1,
+        temperature=0,
         top_p=1,
         max_tokens=1000,
         seed=42,
@@ -66,31 +66,22 @@ def ask_llm(prompt):  # send prompt to llm using openai api
 
 
 def answer_question(project_index, question):
-    symbols = find_relevant_symbols(project_index, question)
-
-    if not symbols:
-        return "I could not identify any relevant function in the project.Please try a different question."
-
-    contexts = {}
-
-    for symbol in symbols:
-        context = build_context(project_index, symbol)
-
-        if context:
-            contexts[symbol] = context
-
-    if not contexts:
-        return "I found relevant symbols, but could not build context for them."
-
-    prompt = build_prompt(question, contexts)
-    return ask_llm(prompt)
+    return run_agent(project_index, question)
 
 
 def get_symbol_context_tool(project_index, symbol):
     return build_context(project_index, symbol)
 
 
-def test_tool_call(project_index):
+def test_tool_call():
+    print("Starting tool test...")
+
+    messages = [
+        {
+            "role": "user",
+            "content": "How does the /scan endpoint ultimately build project_index?"
+        }
+    ]
 
     tools = [
         {
@@ -112,18 +103,12 @@ def test_tool_call(project_index):
         }
     ]
 
-    messages = [
-        {
-            "role": "user",
-            "content": "What does scan_directory do?"
-        }
-    ]
-
+    # FIRST LLM REQUEST
     response = client.chat.completions.create(
         model="meta/llama-3.1-8b-instruct",
         messages=messages,
         tools=tools,
-        tool_choice="auto"
+        temperature=0,
     )
 
     message = response.choices[0].message
@@ -131,52 +116,187 @@ def test_tool_call(project_index):
     print("MODEL TOOL CALL:")
     print(message.tool_calls)
 
-    if not message.tool_calls:
-        print("Model did not request a tool.")
-        return
-
-    tool_call = message.tool_calls[0]
-
-    arguments = json.loads(tool_call.function.arguments)
-    symbol = arguments["symbol"]
-
-    print("\nMODEL REQUESTED:")
-    print(symbol)
-
-    # Add the assistant's tool-call message to the conversation
+    # Add model's response to conversation
     messages.append(message)
 
-    # Execute our actual Python function
-    result = get_symbol_context_tool(project_index, symbol)
+    # Execute requested tools
+    if message.tool_calls:
 
-    # Give the result back to the model
-    messages.append({
-        "role": "tool",
-        "tool_call_id": tool_call.id,
-        "content": str(result)
-    })
+        for tool_call in message.tool_calls:
 
-    print("\nSending tool result back to model...")
+            if tool_call.function.name == "get_symbol_context":
 
+                arguments = json.loads(tool_call.function.arguments)
+
+                symbol = arguments["symbol"]
+
+                print("MODEL REQUESTED SYMBOL:")
+                print(symbol)
+
+                # YOUR ACTUAL TOOL
+                project = Path(".")
+                project_index = scan_directory(project)
+
+                result = build_context(project_index, symbol)
+
+                print("TOOL RESULT:")
+                print(result)
+
+                # IMPORTANT:
+                # Send tool result BACK to the model
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": tool_call.id,
+                        "content": str(result)
+                    }
+                )
+
+    # SECOND LLM REQUEST
     final_response = client.chat.completions.create(
         model="meta/llama-3.1-8b-instruct",
         messages=messages,
-        tools=tools
+        tools=tools,
+        temperature=0,
     )
 
-    final_message = final_response.choices[0].message
+    answer = final_response.choices[0].message.content
 
     print("\nFINAL ANSWER:")
-    print(final_message.content)
-    
-    
-        
+    print(answer)
+
+
+def run_agent(project_index, question):
+
+    tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "search_project",
+                "description": (
+                    "Search the project for relevant symbols, functions, "
+                    "variables, imports, and references."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "What to search for in the project."
+                        }
+                    },
+                    "required": ["query"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "get_symbol_context",
+                "description": (
+                    "Get detailed code context for a specific function. "
+                    "Returns its definition, body, references, imports, "
+                    "calls, and related functions."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "symbol": {
+                            "type": "string",
+                            "description": "The function name to inspect."
+                        }
+                    },
+                    "required": ["symbol"]
+                }
+            }
+        }
+    ]
+
+    messages = [
+        {
+            "role": "system",
+            "content": """
+You are Antigravity, an AI code assistant.
+
+Answer questions using the project's code.
+
+When you need information about a function, use the
+get_symbol_context tool instead of guessing.
+
+Do not invent behavior that is not supported by the tool results.
+"""
+        },
+        {
+            "role": "user",
+            "content": question
+        }
+    ]
+
+    while True:
+
+        response = client.chat.completions.create(
+            model="meta/llama-3.1-8b-instruct",
+            messages=messages,
+            tools=tools,
+            tool_choice="auto"
+        )
+
+        message = response.choices[0].message
+
+        # Model has finished reasoning and produced an answer
+        if not message.tool_calls:
+            return message.content
+
+        # Add model's tool request to conversation
+        messages.append(message)
+
+        # Execute every requested tool
+        for tool_call in message.tool_calls:
+
+            arguments = json.loads(
+                tool_call.function.arguments
+            )
+
+            if tool_call.function.name == "search_project":
+
+                query = arguments["query"]
+
+                result = find_relevant_symbols(
+                    project_index,
+                    query
+                )
+
+            elif tool_call.function.name == "get_symbol_context":
+
+                symbol = arguments["symbol"]
+
+                result = get_symbol_context_tool(
+                    project_index,
+                    symbol
+                )
+
+            else:
+                result = {
+                    "error": f"Unknown tool: {tool_call.function.name}"
+                }
+
+            messages.append({
+                "role": "tool",
+                "tool_call_id": tool_call.id,
+                "content": str(result)
+            })
+
+
+def get_symbol_context_tool(project_index, symbol):
+    return build_context(project_index, symbol)
+
+
 if __name__ == "__main__":
     project = Path(".")
     project_index = scan_directory(project)
 
     print("Starting tool test...")
 
-    test_tool_call(project_index)
+    test_tool_call()
 
     print("Tool test finished.")

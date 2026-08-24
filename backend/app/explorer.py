@@ -1,6 +1,7 @@
+from app.scanner import scan_directory
 import re
 
-from .ast_parser import build_ast_index,parse_python_imports,parse_python_variables,parse_python_variables
+from .ast_parser import build_ast_index, parse_python_imports, parse_python_variables, parse_python_variables
 from pathlib import Path
 from .parser import parse_function, parse_function_calls
 
@@ -147,7 +148,7 @@ def build_context(project_index, symbol):
     imports = get_imports(project_index)
     calls = find_function_calls(project_index, body)
     called_function_context = get_called_function_context(project_index, calls)
-    variables =  get_variable_context(project_index, body)
+    variables = get_variable_context(project_index, body)
     context = {
         "definition": definition,
         "body": body,
@@ -176,6 +177,7 @@ def get_called_function_context(project_index, calls):
             }
     return called_functions
 
+
 def find_variable_definitions(project_index, symbol):
     variables = []
 
@@ -194,41 +196,42 @@ def find_variable_definitions(project_index, symbol):
 
     return variables
 
-def get_variable_context(project_index,function_body):
-    variables={}
-    
-    #find variable names used inside function
+
+def get_variable_context(project_index, function_body):
+    variables = {}
+
+    # find variable names used inside function
     for file_path, content in project_index.items():
-        source_code = "".join(line_text for _,line_text in content)
+        source_code = "".join(line_text for _, line_text in content)
         parsed_variables = parse_python_variables(source_code)
-        
+
         print("FILE:", file_path)
         print("VARIABLES:", parsed_variables)
-        
+
         for variable in parsed_variables:
             name = variable["name"]
             if name in function_body:
-                variable[name]={
-                    "definition":variable,
-                    "file_path":str(file_path)
+                variable[name] = {
+                    "definition": variable,
+                    "file_path": str(file_path)
                 }
     return variables
 
 
 def find_relevant_symbols(project_index, question):
-    relevant_symbols=[]
+    relevant_symbols = []
     functions = get_functions(project_index)
     question_words = set(question.lower().split())
-    
+
     for function in functions:
-        name  = function["name"].lower()
-        
+        name = function["name"].lower()
+
         if name in question_words:
             relevant_symbols.append(function["name"])
-    
+
     return relevant_symbols
 
-from app.scanner import scan_directory  
+
 if __name__ == "__main__":
     project = Path(".")
 
@@ -237,6 +240,7 @@ if __name__ == "__main__":
     print(
         find_relevant_symbols(
             project_index,
-            "What does scan_directory do?"
+            "What directories does scan_directory ignore?"
+
         )
     )
