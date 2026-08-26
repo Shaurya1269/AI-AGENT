@@ -1,11 +1,16 @@
 from openai import OpenAI
 from dotenv import load_dotenv
 import os
-from .explorer import build_context, find_relevant_symbols
+from .explorer import (
+    build_context,
+    find_relevant_symbols,
+    get_called_function_context,
+)
 
 from pathlib import Path
 from .scanner import scan_directory
 import json
+from .search import search_index
 
 load_dotenv()
 api_key = os.getenv("NVIDIA_API_KEY")
@@ -54,7 +59,7 @@ def ask_llm(prompt):  # send prompt to llm using openai api
     if client is None:
         return "NVIDIA_API_KEY is not configured."
     response = client.chat.completions.create(
-        model="meta/llama-3.1-8b-instruct",
+        model="deepseek-ai/deepseek-v4-flash-0731sh-0731",
         messages=[{"role": "user", "content": prompt}],
         temperature=0,
         top_p=1,
@@ -105,7 +110,7 @@ def test_tool_call():
 
     # FIRST LLM REQUEST
     response = client.chat.completions.create(
-        model="meta/llama-3.1-8b-instruct",
+        model="deepseek-ai/deepseek-v4-flash-0731",
         messages=messages,
         tools=tools,
         temperature=0,
@@ -152,9 +157,22 @@ def test_tool_call():
                     }
                 )
 
+            elif tool_call.function.name == "search_index":
+
+                arguments = json.loads(tool_call.function.arguments)
+                query = arguments['query']
+                result = search_code_tool(
+                    project_index, query
+                )
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tool_call.id,
+                    "content": str(result)
+                })
+
     # SECOND LLM REQUEST
     final_response = client.chat.completions.create(
-        model="meta/llama-3.1-8b-instruct",
+        model="deepseek-ai/deepseek-v4-flash-0731",
         messages=messages,
         tools=tools,
         temperature=0,
@@ -167,6 +185,9 @@ def test_tool_call():
 
 
 def run_agent(project_index, question):
+
+    if client is None:
+        return "NVIDIA_API_KEY is not configured."
 
     tools = [
         {
@@ -209,6 +230,27 @@ def run_agent(project_index, question):
                     "required": ["symbol"]
                 }
             }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "search_code",
+                "description": (
+                    "Search the project for code related to a query. "
+                    "Use this when you do not know which function or symbol "
+                    "contains the information needed to answer the question."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "The code concept, symbol, or keyword to search for."
+                        }
+                    },
+                    "required": ["query"]
+                }
+            }
         }
     ]
 
@@ -220,10 +262,28 @@ You are Antigravity, an AI code assistant.
 
 Answer questions using the project's code.
 
-When you need information about a function, use the
-get_symbol_context tool instead of guessing.
+You have two tools:
 
-Do not invent behavior that is not supported by the tool results.
+1. search_code
+   Use this to discover relevant symbols, files, or code when you
+   don't know where the answer is.
+
+2. get_symbol_context
+   Use this to inspect a specific function in detail, including its
+   definition, body, references, imports, calls, variables, and
+   called functions.
+
+Use tools when necessary rather than guessing.
+
+If a question mentions a function you already know, you may directly
+use get_symbol_context.
+
+If you don't know which part of the project is relevant, use
+search_code first.
+
+You may call multiple tools if necessary.
+
+Do not invent behavior that is not supported by tool results.
 """
         },
         {
@@ -235,7 +295,7 @@ Do not invent behavior that is not supported by the tool results.
     while True:
 
         response = client.chat.completions.create(
-            model="meta/llama-3.1-8b-instruct",
+            model="deepseek-ai/deepseek-v4-flash-0731",
             messages=messages,
             tools=tools,
             tool_choice="auto"
@@ -257,7 +317,7 @@ Do not invent behavior that is not supported by the tool results.
                 tool_call.function.arguments
             )
 
-            if tool_call.function.name == "search_project":
+            if tool_call.function.name in {"search_project", "search_code"}:
 
                 query = arguments["query"]
 
@@ -291,6 +351,16 @@ def get_symbol_context_tool(project_index, symbol):
     return build_context(project_index, symbol)
 
 
+def get_called_function_context_tool(project_index, symbol):
+    context = get_symbol_context_tool(project_index, symbol)
+
+    if not context:
+        return None
+
+    calls = context.get("calls", [])
+    return get_called_function_context(project_index, calls)
+
+
 if __name__ == "__main__":
     project = Path(".")
     project_index = scan_directory(project)
@@ -300,3 +370,9 @@ if __name__ == "__main__":
     test_tool_call()
 
     print("Tool test finished.")
+
+
+def search_code_tool(project_index, query):
+    return search_index(project_index, query)
+
+

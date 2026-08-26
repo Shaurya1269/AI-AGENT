@@ -1,9 +1,9 @@
-from app.scanner import scan_directory
 import re
 
-from .ast_parser import build_ast_index, parse_python_imports, parse_python_variables, parse_python_variables
+from .ast_parser import build_ast_index, parse_python_variables
 from pathlib import Path
 from .parser import parse_function, parse_function_calls
+from .scanner import scan_directory
 
 
 def get_functions(project_index):
@@ -205,13 +205,10 @@ def get_variable_context(project_index, function_body):
         source_code = "".join(line_text for _, line_text in content)
         parsed_variables = parse_python_variables(source_code)
 
-        print("FILE:", file_path)
-        print("VARIABLES:", parsed_variables)
-
         for variable in parsed_variables:
             name = variable["name"]
             if name in function_body:
-                variable[name] = {
+                variables[name] = {
                     "definition": variable,
                     "file_path": str(file_path)
                 }
