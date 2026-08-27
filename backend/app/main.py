@@ -7,6 +7,7 @@ from .explorer import (get_functions, get_imports,
 from .ai import answer_question, test_tool_call
 
 app = FastAPI()
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 # whenever someone performs get request on the root endpoint, this function will be executed
 
@@ -26,7 +27,7 @@ project_index = {}
 
 @app.get("/scan")
 def scan():
-    project = Path(".")
+    project = PROJECT_ROOT
     global project_index
     project_index = scan_directory(project)
     return {
@@ -78,7 +79,7 @@ def imports():
 
 # tells us about the number of all the files,functions,imports,root files etc.
 def get_projects():
-    root = Path(".").resolve()  # gives absolute path
+    root = PROJECT_ROOT
     project_structure = {
         "files": len(project_index),
         "functions": len(get_functions(project_index)),
@@ -169,10 +170,9 @@ def ask(question: str):
             "status": "error",
             "message": "No files indexed. Please run the /scan endpoint first."
         }
-    result = answer_question(project_index,question)
+    result = answer_question(project_index, question)
     return {
         "status": "success",
         "question": question,
         "answer": result
     }
-

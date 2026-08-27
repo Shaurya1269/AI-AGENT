@@ -1,23 +1,17 @@
-from openai import OpenAI
-from dotenv import load_dotenv
-import os
+import json
+from typing import Any, cast
 from .explorer import (
     build_context,
     find_relevant_symbols,
     get_called_function_context,
 )
+from .llm import MODEL, client, generate
 
 from pathlib import Path
 from .scanner import scan_directory
-import json
 from .search import search_index
 
-load_dotenv()
-api_key = os.getenv("NVIDIA_API_KEY")
-client = OpenAI(
-    base_url="https://integrate.api.nvidia.com/v1",
-    api_key=api_key
-) if api_key else None
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 def build_prompt(question, context):
@@ -58,8 +52,9 @@ When answering:
 def ask_llm(prompt):  # send prompt to llm using openai api
     if client is None:
         return "NVIDIA_API_KEY is not configured."
-    response = client.chat.completions.create(
-        model="deepseek-ai/deepseek-v4-flash-0731sh-0731",
+    llm_client = cast(Any, client)
+    response = llm_client.chat.completions.create(
+        model=MODEL,
         messages=[{"role": "user", "content": prompt}],
         temperature=0,
         top_p=1,
@@ -74,14 +69,10 @@ def answer_question(project_index, question):
     return run_agent(project_index, question)
 
 
-def get_symbol_context_tool(project_index, symbol):
-    return build_context(project_index, symbol)
-
-
 def test_tool_call():
     print("Starting tool test...")
 
-    messages = [
+    messages: list[Any] = [
         {
             "role": "user",
             "content": "How does the /scan endpoint ultimately build project_index?"
@@ -109,8 +100,14 @@ def test_tool_call():
     ]
 
     # FIRST LLM REQUEST
-    response = client.chat.completions.create(
-        model="deepseek-ai/deepseek-v4-flash-0731",
+    if client is None:
+        print("NVIDIA_API_KEY is not configured.")
+        return
+
+    llm_client = cast(Any, client)
+    project_index = {}
+    response = llm_client.chat.completions.create(
+        model=MODEL,
         messages=messages,
         tools=tools,
         temperature=0,
@@ -139,7 +136,7 @@ def test_tool_call():
                 print(symbol)
 
                 # YOUR ACTUAL TOOL
-                project = Path(".")
+                project = PROJECT_ROOT
                 project_index = scan_directory(project)
 
                 result = build_context(project_index, symbol)
@@ -171,8 +168,8 @@ def test_tool_call():
                 })
 
     # SECOND LLM REQUEST
-    final_response = client.chat.completions.create(
-        model="deepseek-ai/deepseek-v4-flash-0731",
+    final_response = llm_client.chat.completions.create(
+        model=MODEL,
         messages=messages,
         tools=tools,
         temperature=0,
@@ -189,7 +186,7 @@ def run_agent(project_index, question):
     if client is None:
         return "NVIDIA_API_KEY is not configured."
 
-    tools = [
+    tools: list[Any] = [
         {
             "type": "function",
             "function": {
@@ -254,7 +251,7 @@ def run_agent(project_index, question):
         }
     ]
 
-    messages = [
+    messages: list[Any] = [
         {
             "role": "system",
             "content": """
@@ -294,14 +291,13 @@ Do not invent behavior that is not supported by tool results.
 
     while True:
 
-        response = client.chat.completions.create(
-            model="deepseek-ai/deepseek-v4-flash-0731",
+        message = generate(
             messages=messages,
-            tools=tools,
-            tool_choice="auto"
+            tools=tools
         )
 
-        message = response.choices[0].message
+        if message is None:
+            return "NVIDIA_API_KEY is not configured."
 
         # Model has finished reasoning and produced an answer
         if not message.tool_calls:
@@ -312,6 +308,7 @@ Do not invent behavior that is not supported by tool results.
 
         # Execute every requested tool
         for tool_call in message.tool_calls:
+            tool_call = cast(Any, tool_call)
 
             arguments = json.loads(
                 tool_call.function.arguments
@@ -362,7 +359,7 @@ def get_called_function_context_tool(project_index, symbol):
 
 
 if __name__ == "__main__":
-    project = Path(".")
+    project = PROJECT_ROOT
     project_index = scan_directory(project)
 
     print("Starting tool test...")
@@ -374,5 +371,3 @@ if __name__ == "__main__":
 
 def search_code_tool(project_index, query):
     return search_index(project_index, query)
-
-

@@ -230,7 +230,7 @@ def find_relevant_symbols(project_index, question):
 
 
 if __name__ == "__main__":
-    project = Path(".")
+    project = Path(__file__).resolve().parents[2]
 
     project_index = scan_directory(project)
 

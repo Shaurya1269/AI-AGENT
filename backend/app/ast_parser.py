@@ -102,15 +102,17 @@ def analyze_python(source_code):
 
 def build_ast_index(project_index):
     ast_index = {}
-    
-    for file_path , content in project_index.items():
-        if file_path.suffix != ".py":
+
+    for file_path, content in project_index.items():
+        if file_path.suffix.lower() != ".py":
             continue
         source_code = "".join(
-            line_text for _, line_text in content    # line_text is the text of each line in the file, _ is the line number
+            # line_text is the text of each line in the file, _ is the line number
+            line_text for _, line_text in content
         )
         ast_index[file_path] = analyze_python(source_code)
     return ast_index
+
 
 def parse_python_variables(source_code):
     tree = ast.parse(source_code)
@@ -129,6 +131,7 @@ def parse_python_variables(source_code):
                     })
 
     return variables
+
 
 if __name__ == "__main__":
     source = """
