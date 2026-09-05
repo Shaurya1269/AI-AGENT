@@ -1,5 +1,5 @@
 import re
-
+import ast
 from .ast_parser import build_ast_index, parse_python_variables
 from pathlib import Path
 from .parser import parse_function, parse_function_calls
@@ -75,25 +75,49 @@ def find_definitions(project_index, symbol):
 
 def find_references(project_index, symbol):
     references = []
-    symbol_pattern = re.compile(rf"\b{re.escape(symbol)}\b")
+
     for file_path, content in project_index.items():
-        for line_number, line_text in content:
-            stripped_line = line_text.strip()
-            function_match = re.match(
-                r"(?:async\s+)?def\s+([A-Za-z_]\w*)", stripped_line
-            )
-            class_match = re.match(r"class\s+([A-Za-z_]\w*)", stripped_line)
-            is_definition = (
-                (function_match and function_match.group(1) == symbol)
-                or (class_match and class_match.group(1) == symbol)
-            )
-            if symbol_pattern.search(line_text) and not is_definition:
+        if file_path.suffix.lower() != ".py":
+            continue
+
+        source_code = "".join(
+            line_text for _, line_text in content
+        )
+
+        try:
+            tree = ast.parse(source_code)
+        except SyntaxError:
+            continue
+
+        for node in ast.walk(tree):
+            # Function/class definitions are definitions, not references
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                if node.name == symbol:
+                    continue
+
+            # Direct name usage:
+            # scan_directory(...)
+            # x = scan_directory
+            if isinstance(node, ast.Name) and node.id == symbol:
                 references.append({
                     "name": symbol,
                     "file_path": str(file_path),
-                    "line_number": line_number,
-                    "text": stripped_line
+                    "line_number": node.lineno,
+                    "text": content[node.lineno - 1][1].strip(),
+                    "type": "name"
                 })
+
+            # Attribute usage:
+            # scanner.scan_directory(...)
+            elif isinstance(node, ast.Attribute) and node.attr == symbol:
+                references.append({
+                    "name": symbol,
+                    "file_path": str(file_path),
+                    "line_number": node.lineno,
+                    "text": content[node.lineno - 1][1].strip(),
+                    "type": "attribute"
+                })
+
     return references
 
 
@@ -241,3 +265,48 @@ if __name__ == "__main__":
 
         )
     )
+
+
+def find_callers(project_index, symbol):
+    callers = []
+    for file_path, content in project_index.items():
+        if file_path.suffix.lower() != ".py":
+            continue
+        source_code = "".join(line_text for _, line_text in content)
+        try:
+            tree = ast.parse(source_code)
+        except SyntaxError:
+            continue
+
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+
+            called_name = None
+            if isinstance(node.func, ast.Name):
+                called_name = node.func.id
+            elif isinstance(node.func, ast.Attribute):
+                called_name = node.func.attr
+
+            if called_name != symbol:
+                continue
+
+            caller = None
+            for parent in ast.walk(tree):
+                if isinstance(parent, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    parent_end_lineno = parent.end_lineno
+                    if (
+                        parent_end_lineno is not None
+                        and parent.lineno <= node.lineno <= parent_end_lineno
+                    ):
+                        if caller is None or parent.lineno > caller.lineno:
+                            caller = parent
+
+            callers.append({
+                "symbol": symbol,
+                "caller": caller.name if caller else "<module>",
+                "file_path": str(file_path),
+                "line_number": node.lineno
+            })
+    return callers
+

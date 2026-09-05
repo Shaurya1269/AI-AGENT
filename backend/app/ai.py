@@ -4,6 +4,8 @@ from .explorer import (
     build_context,
     find_relevant_symbols,
     get_called_function_context,
+    find_references,
+    find_callers
 )
 from .llm import MODEL, client, generate
 
@@ -45,6 +47,18 @@ When answering:
 - Keep the explanation concise unless the user asks for more detail.
 - Never say that information cannot be determined if that information is explicitly present anywhere in the provided context.
 - Before claiming something is unknown, check the function body, definitions, references, imports, and calls carefully.
+
+GROUNDING RULES:
+- Base every claim about the project on information returned by the available tools.
+- Do not infer implementation details merely because they would be reasonable or conventional.
+- If the available tool results do not establish an answer, explicitly say that the code does not provide enough information.
+- Distinguish clearly between:
+  1. What the code explicitly shows.
+  2. What can be directly inferred from the code.
+  3. What cannot be determined from the available code.
+- Never use words such as "likely", "probably", or "it would" to fill an evidence gap.
+- If a question requires inspecting a symbol, file, reference, caller, parser, or other project detail, use the appropriate tool before answering.
+
 """
     return prompt
 
@@ -210,6 +224,23 @@ def run_agent(project_index, question):
         {
             "type": "function",
             "function": {
+                "name": "get_symbol_references",
+                "description": "Find actual code references to a function, class, or variable in the project.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "symbol": {
+                            "type": "string",
+                            "description": "The function, class, or variable name to find references for."
+                        }
+                    },
+                    "required": ["symbol"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
                 "name": "get_symbol_context",
                 "description": (
                     "Get detailed code context for a specific function. "
@@ -222,6 +253,23 @@ def run_agent(project_index, question):
                         "symbol": {
                             "type": "string",
                             "description": "The function name to inspect."
+                        }
+                    },
+                    "required": ["symbol"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "get_symbol_callers",
+                "description": "Find which functions or modules call a specific function in the project.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "symbol": {
+                            "type": "string",
+                            "description": "The function name whose callers should be found."
                         }
                     },
                     "required": ["symbol"]
@@ -331,6 +379,13 @@ Do not invent behavior that is not supported by tool results.
                     project_index,
                     symbol
                 )
+            elif tool_call.function.name == "get_symbol_references":
+                symbol = arguments['symbol']
+                result = find_references(project_index, symbol)
+
+            elif tool_call.function.name == "get_symbol_callers":
+                symbol = arguments['symbol']
+                result = find_callers(project_index, symbol)
 
             else:
                 result = {
@@ -368,7 +423,7 @@ if __name__ == "__main__":
 
     print("3. Project scanned.", flush=True)
 
-    question = "Why does scan_directory call read_file?"
+    question = "Where is scan_directory defined?"
 
     print("4. Running agent...", flush=True)
     result = run_agent(project_index, question)
