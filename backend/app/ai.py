@@ -51,7 +51,7 @@ When answering:
 
 def ask_llm(prompt):  # send prompt to llm using openai api
     if client is None:
-        return "NVIDIA_API_KEY is not configured."
+        return "OPENROUTER_API_KEY is not configured."
     llm_client = cast(Any, client)
     response = llm_client.chat.completions.create(
         model=MODEL,
@@ -101,7 +101,7 @@ def test_tool_call():
 
     # FIRST LLM REQUEST
     if client is None:
-        print("NVIDIA_API_KEY is not configured.")
+        print("OPENROUTER_API_KEY is not configured.")
         return
 
     llm_client = cast(Any, client)
@@ -158,7 +158,7 @@ def test_tool_call():
 
                 arguments = json.loads(tool_call.function.arguments)
                 query = arguments['query']
-                result = search_code_tool(
+                result = search_index(
                     project_index, query
                 )
                 messages.append({
@@ -184,7 +184,7 @@ def test_tool_call():
 def run_agent(project_index, question):
 
     if client is None:
-        return "NVIDIA_API_KEY is not configured."
+        return "OPENROUTER_API_KEY is not configured."
 
     tools: list[Any] = [
         {
@@ -297,7 +297,7 @@ Do not invent behavior that is not supported by tool results.
         )
 
         if message is None:
-            return "NVIDIA_API_KEY is not configured."
+            return "OPENROUTER_API_KEY is not configured."
 
         # Model has finished reasoning and produced an answer
         if not message.tool_calls:
@@ -359,15 +359,19 @@ def get_called_function_context_tool(project_index, symbol):
 
 
 if __name__ == "__main__":
-    project = PROJECT_ROOT
-    project_index = scan_directory(project)
+    print("1. Starting tool test...", flush=True)
 
-    print("Starting tool test...")
+    project_path = Path(".")
 
-    test_tool_call()
+    print("2. Scanning project...", flush=True)
+    project_index = scan_directory(project_path)
 
-    print("Tool test finished.")
+    print("3. Project scanned.", flush=True)
 
+    question = "Why does scan_directory call read_file?"
 
-def search_code_tool(project_index, query):
-    return search_index(project_index, query)
+    print("4. Running agent...", flush=True)
+    result = run_agent(project_index, question)
+
+    print("5. Agent finished.", flush=True)
+    print(result)
