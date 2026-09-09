@@ -310,3 +310,17 @@ def find_callers(project_index, symbol):
             })
     return callers
 
+from pathlib import Path
+
+fake_project = {
+    Path("auth.py"): [
+        (1, "def login():\n"),
+        (2, "    return 'auth'\n"),
+    ],
+    Path("api.py"): [
+        (1, "def login():\n"),
+        (2, "    return 'api'\n"),
+    ],
+}
+
+print(find_definitions(fake_project, "login"))
