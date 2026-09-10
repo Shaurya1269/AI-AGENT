@@ -241,31 +241,33 @@ def get_variable_context(project_index, function_body):
 
 def find_relevant_symbols(project_index, question):
     relevant_symbols = []
-    functions = get_functions(project_index)
-    question_words = set(question.lower().split())
 
+    functions = get_functions(project_index)
+    imports = get_imports(project_index)
+
+    question_lower = question.lower()
+
+    # Search function names
     for function in functions:
         name = function["name"].lower()
 
-        if name in question_words:
+        if name in question_lower:
             relevant_symbols.append(function["name"])
 
-    return relevant_symbols
+    # Search imported modules/symbols
+    for item in imports:
+        module = item["module"].lower()
 
+        if module in question_lower:
+            relevant_symbols.append(module)
 
-if __name__ == "__main__":
-    project = Path(__file__).resolve().parents[2]
+        if item["symbol"]:
+            symbol = item["symbol"].lower()
 
-    project_index = scan_directory(project)
+            if symbol in question_lower:
+                relevant_symbols.append(symbol)
 
-    print(
-        find_relevant_symbols(
-            project_index,
-            "What directories does scan_directory ignore?"
-
-        )
-    )
-
+    return list(dict.fromkeys(relevant_symbols))
 
 def find_callers(project_index, symbol):
     callers = []

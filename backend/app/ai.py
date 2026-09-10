@@ -343,6 +343,7 @@ Do not invent behavior that is not supported by tool results.
             messages=messages,
             tools=tools
         )
+        
 
         if message is None:
             return "OPENROUTER_API_KEY is not configured."
