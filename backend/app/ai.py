@@ -5,7 +5,8 @@ from .explorer import (
     find_relevant_symbols,
     get_called_function_context,
     find_references,
-    find_callers
+    find_callers,
+    search_code_text
 )
 from .llm import MODEL, client, generate
 
@@ -363,14 +364,13 @@ Do not invent behavior that is not supported by tool results.
                 tool_call.function.arguments
             )
 
-            if tool_call.function.name in {"search_project", "search_code"}:
-
+            if tool_call.function.name == "search_project":
                 query = arguments["query"]
-
-                result = find_relevant_symbols(
-                    project_index,
-                    query
-                )
+                result = find_relevant_symbols(project_index, query)
+                
+            elif tool_call.function.name == "search_code":
+                query = arguments["query"]
+                result = search_code_text(project_index, query)
 
             elif tool_call.function.name == "get_symbol_context":
 

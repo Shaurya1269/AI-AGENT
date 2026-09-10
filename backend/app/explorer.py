@@ -314,15 +314,30 @@ def find_callers(project_index, symbol):
 
 from pathlib import Path
 
-fake_project = {
-    Path("auth.py"): [
-        (1, "def login():\n"),
-        (2, "    return 'auth'\n"),
-    ],
-    Path("api.py"): [
-        (1, "def login():\n"),
-        (2, "    return 'api'\n"),
-    ],
-}
+def search_code_text(project_index, query):
+    results = []
+    query = query.lower()
 
-print(find_definitions(fake_project, "login"))
+    for file_path, content in project_index.items():
+        for line_number, line_text in content:
+            if query in line_text.lower():
+                results.append({
+                    "file_path": str(file_path),
+                    "line_number": line_number,
+                    "text": line_text.strip()
+                })
+                
+
+    return results
+
+if __name__ == "__main__":
+    project = Path(__file__).resolve().parents[2]
+
+    project_index = scan_directory(project)
+
+    print(
+        search_code_text(
+            project_index,
+            ".git"
+        )
+    )
